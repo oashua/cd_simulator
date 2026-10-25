@@ -1,0 +1,20 @@
+# 大文件与产物
+*.stl
+*.obj
+*.eMesh
+*.glb
+runs/
+experiments/
+
+# Python
+__pycache__/
+*.pyc
+.pytest_cache/
+*.egg-info/
+
+# Rust / Tauri
+app/src-tauri/target/
+
+# Node
+app/node_modules/
+app/dist/
