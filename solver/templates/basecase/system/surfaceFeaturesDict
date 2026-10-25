@@ -1,0 +1,10 @@
+FoamFile
+{
+    format      ascii;
+    class       dictionary;
+    object      surfaceFeaturesDict;
+}
+
+surfaces ("${CAR_STL}");
+
+#includeEtc "caseDicts/surfaceFeatures/surfaceFeaturesDictDefaults"

@@ -1,0 +1,46 @@
+FoamFile
+{
+    format      ascii;
+    class       volScalarField;
+    object      omega;
+}
+
+dimensions      [0 0 -1 0 0 0 0];
+
+internalField   uniform ${OMEGA_INF};
+
+boundaryField
+{
+    inlet
+    {
+        type            fixedValue;
+        value           uniform ${OMEGA_INF};
+    }
+    outlet
+    {
+        type            inletOutlet;
+        inletValue      uniform ${OMEGA_INF};
+        value           uniform ${OMEGA_INF};
+    }
+    ground
+    {
+        type            slip;
+    }
+    top
+    {
+        type            zeroGradient;
+    }
+    sideL
+    {
+        type            zeroGradient;
+    }
+    sideR
+    {
+        type            zeroGradient;
+    }
+    car
+    {
+        type            omegaWallFunction;
+        value           uniform ${OMEGA_INF};
+    }
+}

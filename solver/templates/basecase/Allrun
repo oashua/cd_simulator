@@ -1,0 +1,17 @@
+#!/bin/bash
+# cd_simulator 求解入口：用法 ./Allrun <nProc>
+set -e
+source /opt/openfoam2312/etc/bashrc
+cd "$(dirname "$0")"
+NPROC="${1:-4}"
+
+blockMesh                > log.blockMesh 2>&1
+surfaceFeatures          > log.surfaceFeatures 2>&1
+snappyHexMesh -overwrite > log.snappyHexMesh 2>&1
+decomposePar -force      > log.decomposePar 2>&1
+# WSL2 内常以 root 运行，OpenMPI 需要 --allow-run-as-root（非 root 时无副作用）
+mpirun --allow-run-as-root -np "$NPROC" simpleFoam -parallel > log.simpleFoam 2>&1
+reconstructPar -latestTime > log.reconstructPar 2>&1
+postProcess -func surfaces   -latestTime > log.surfaces 2>&1
+postProcess -func streamlines -latestTime > log.streamlines 2>&1
+echo "ALLRUN_DONE"

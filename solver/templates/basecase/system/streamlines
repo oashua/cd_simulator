@@ -1,0 +1,25 @@
+FoamFile
+{
+    format      ascii;
+    class       dictionary;
+    object      streamlines;
+}
+
+// 由 postProcess -func streamlines -latestTime 单独调用
+streamlines
+{
+    type            streamlines;
+    libs            ("libfieldFunctionObjects.so");
+    writeControl    writeTime;
+    writeInterval   1;
+    log             yes;
+    lifeTime        5;
+    trackForward    yes;
+    cloud           particleTracks;
+    seedSamples     12;
+    interpolationScheme cellPoint;
+    fields          (U);
+    seedPosition    ${SEED_POS};
+    seedAxis        (0 1 0);
+    seedLength      ${SEED_LENGTH};
+}

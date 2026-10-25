@@ -1,0 +1,48 @@
+/*--------------------------------*- C++ -*----------------------------------*\
+|  速度场初始/边界条件（casegen.py 渲染）                                       |
+\*---------------------------------------------------------------------------*/
+FoamFile
+{
+    format      ascii;
+    class       volVectorField;
+    object      U;
+}
+
+dimensions      [0 1 -1 0 0 0 0];
+
+internalField   uniform (${U_INF} 0 0);
+
+boundaryField
+{
+    inlet
+    {
+        type            fixedValue;
+        value           uniform (${U_INF} 0 0);
+    }
+    outlet
+    {
+        type            inletOutlet;
+        inletValue      uniform (0 0 0);
+        value           uniform (${U_INF} 0 0);
+    }
+    ground
+    {
+        type            slip;
+    }
+    top
+    {
+        type            slip;
+    }
+    sideL
+    {
+        type            slip;
+    }
+    sideR
+    {
+        type            slip;
+    }
+    car
+    {
+        type            noSlip;
+    }
+}

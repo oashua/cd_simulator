@@ -1,0 +1,96 @@
+/*--------------------------------*- C++ -*----------------------------------*\
+|  cd_simulator 车身网格细化（由 casegen.py 渲染，勿手改）                      |
+\*---------------------------------------------------------------------------*/
+FoamFile
+{
+    format      ascii;
+    class       dictionary;
+    object      snappyHexMeshDict;
+}
+
+castellatedMesh true;
+snap            true;
+addLayers       true;
+
+geometry
+{
+    ${CAR_STL}
+    {
+        type triSurfaceMesh;
+        name car;
+    }
+    nearBox
+    {
+        type searchableBox;
+        min ${NEARBOX_MIN};
+        max ${NEARBOX_MAX};
+    }
+}
+
+castellatedMeshControls
+{
+    maxLocalCells       4000000;
+    maxGlobalCells      12000000;
+    minRefinementCells  0;
+    nCellsBetweenLevels 3;
+    features            ();
+    refinementSurfaces
+    {
+        car
+        {
+            level (${SURF_MIN} ${SURF_MAX});
+            patchInfo { type wall; }
+        }
+    }
+    resolveFeatureAngle 60;
+    refinementRegions
+    {
+        nearBox { mode inside; level ${NEARBOX}; }
+    }
+    locationInMesh ${LOC_IN_MESH};
+    allowFreeStandingZoneFaces true;
+}
+
+snapControls
+{
+    nSmoothPatch    3;
+    tolerance       2.0;
+    nSolveIter      50;
+    nRelaxIter      5;
+    nFeatureSnapIter 10;
+    implicitFeatureSnap false;
+    explicitFeatureSnap true;
+    multiRegionFeatureSnap false;
+}
+
+addLayersControls
+{
+    relativeSizes   true;
+    layers
+    {
+        car { nSurfaceLayers 3; }
+    }
+    expansionRatio      1.2;
+    finalLayerThickness 0.3;
+    minThickness        0.05;
+    nGrow               0;
+    featureAngle        60;
+    slipFeatureAngle    30;
+    nRelaxIter          3;
+    nSmoothSurfaceNormals 1;
+    nSmoothNormals      3;
+    nSmoothThickness    10;
+    maxFaceThicknessRatio 0.5;
+    maxThicknessToMedialRatio 0.3;
+    minMedialAxisAngle  90;
+    nBufferCellsNoExtrude 0;
+    nLayerIter          50;
+}
+
+meshQualityControls
+{
+    #includeEtc "caseDicts/mesh/generation/meshQualityDict"
+}
+
+debug 0;
+mergeTolerance 1e-6;
