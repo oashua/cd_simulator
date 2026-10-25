@@ -19,14 +19,14 @@ zmax ${ZMAX};
 
 vertices
 (
-    ($xmin $ymin $zmin)
-    ($xmax $ymin $zmin)
-    ($xmax $ymax $zmin)
-    ($xmin $ymax $zmin)
-    ($xmin $ymin $zmax)
-    ($xmax $ymin $zmax)
-    ($xmax $ymax $zmax)
-    ($xmin $ymax $zmax)
+    ($$xmin $$ymin $$zmin)
+    ($$xmax $$ymin $$zmin)
+    ($$xmax $$ymax $$zmin)
+    ($$xmin $$ymax $$zmin)
+    ($$xmin $$ymin $$zmax)
+    ($$xmax $$ymin $$zmax)
+    ($$xmax $$ymax $$zmax)
+    ($$xmin $$ymax $$zmax)
 );
 
 blocks
