@@ -1,0 +1,101 @@
+"""STL/OBJ 几何预处理：加载、修复、正则化、迎风面积估算。"""
+
+from __future__ import annotations
+
+import logging
+from dataclasses import dataclass
+from pathlib import Path
+
+import numpy as np
+import trimesh
+
+logger = logging.getLogger(__name__)
+
+
+@dataclass
+class GeometryMeta:
+    length: float  # 车长 m（正则化后包围盒）
+    width: float
+    height: float
+    frontal_area: float  # 迎风面积 m²（y-z 平面投影）
+    center: tuple[float, float, float]  # 包围盒中心（x=y=0, z=height/2）
+    path: Path  # cleaned.stl 输出路径
+
+
+def _repair(mesh: trimesh.Trimesh) -> trimesh.Trimesh:
+    """修复法向、补洞；仍不水密时用 pymeshfix 兜底，失败仅警告。"""
+    mesh = mesh.copy()
+    trimesh.repair.fix_normals(mesh)
+    trimesh.repair.fill_holes(mesh)
+    if mesh.is_watertight:
+        return mesh
+    logger.warning("网格非水密，尝试 pymeshfix 修复")
+    try:
+        import pymeshfix
+
+        fixed = pymeshfix.MeshFix(mesh.vertices, mesh.faces)
+        fixed.repair()
+        mesh = trimesh.Trimesh(**fixed.mesh_data)
+        trimesh.repair.fix_normals(mesh)
+    except ImportError:
+        logger.warning("pymeshfix 未安装，跳过兜底修复（snappyHexMesh 通常仍可处理）")
+    except Exception as exc:  # noqa: BLE001 - 修复失败不应阻塞管线
+        logger.warning("pymeshfix 修复失败（%s），继续使用原网格", exc)
+    return mesh
+
+
+def _frontal_area(mesh: trimesh.Trimesh, length: float, divisions: int = 60) -> float:
+    """体素化后向 y-z 平面投影估算迎风面积。
+
+    离散误差 ~ 1/divisions 量级，divisions=60 时约 2-3%，对 Cd 影响可接受。
+    """
+    pitch = length / divisions
+    grid = mesh.voxelized(pitch)
+    idx = np.asarray(grid.sparse_indices)  # (N, 3) 整数格点
+    yz = idx[:, [1, 2]]
+    unique = np.unique(yz, axis=0)
+    return float(unique.shape[0]) * pitch * pitch
+
+
+def prepare_geometry(
+    src: Path, out_dir: Path, scale: float = 1.0, voxel_divisions: int = 60
+) -> GeometryMeta:
+    """加载 STL/OBJ -> 修复 -> 缩放 -> 落地居中 -> 估算迎风面积 -> 导出 cleaned.stl。"""
+    src = Path(src)
+    out_dir = Path(out_dir)
+    if not src.is_file():
+        raise ValueError(f"模型文件不存在: {src}")
+    if scale <= 0:
+        raise ValueError(f"scale 必须为正数，收到 {scale}")
+
+    mesh = trimesh.load(src, force="mesh", process=False)
+    if len(mesh.faces) == 0:
+        raise ValueError(f"模型不含三角面片: {src}")
+
+    mesh = _repair(mesh)
+    mesh.apply_scale(scale)
+
+    # 正则化：min_z 落地，x/y 居中
+    mesh.apply_translation([-mesh.bounds[:, 0].mean(), -mesh.bounds[:, 1].mean(), 0.0])
+    mesh.apply_translation([0.0, 0.0, -mesh.bounds[0, 2]])
+
+    ext = mesh.extents  # (L, W, H)
+    if min(ext) <= 0:
+        raise ValueError(f"模型包围盒非法: {ext}")
+    length = float(ext[0])
+
+    area = _frontal_area(mesh, length, divisions=voxel_divisions)
+
+    out_dir.mkdir(parents=True, exist_ok=True)
+    out_path = out_dir / "cleaned.stl"
+    mesh.export(out_path)
+
+    center = (0.0, 0.0, float(ext[2]) / 2.0)
+    return GeometryMeta(
+        length=length,
+        width=float(ext[1]),
+        height=float(ext[2]),
+        frontal_area=area,
+        center=center,
+        path=out_path,
+    )
