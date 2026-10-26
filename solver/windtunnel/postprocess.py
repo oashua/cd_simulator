@@ -37,17 +37,22 @@ def _as_point_data(mesh, name: str) -> np.ndarray | None:
     """按名字取场；point data 直取，cell data 按关联次数平均到顶点。"""
     if name in mesh.point_data:
         return np.asarray(mesh.point_data[name])
+    # meshio cell_data 结构: {字段名: [每个 cells block 一个数组]}，与 mesh.cells 对齐
+    if name not in mesh.cell_data:
+        return None
     blocks = [
-        (np.asarray(b.data), np.asarray(d[name]))
-        for b, d in zip(mesh.cells, mesh.cell_data.values())
-        if isinstance(d, dict) and name in d
+        (np.asarray(b.data), np.asarray(vals))
+        for b, vals in zip(mesh.cells, mesh.cell_data[name])
+        if len(vals) == len(b.data)
     ]
     if not blocks:
         return None
     acc = np.zeros((len(mesh.points),) + np.shape(blocks[0][1])[1:])
     cnt = np.zeros(len(mesh.points))
     for idx, vals in blocks:
-        np.add.at(acc, idx, vals)
+        v = np.asarray(vals)
+        # idx (F,3) 每行 3 顶点共享该 cell 的值：标量场 (F,) -> (F,1)，向量场 (F,3) -> (F,1,3)
+        np.add.at(acc, idx, v.reshape(v.shape[0], 1, *v.shape[1:]))
         np.add.at(cnt, idx, 1.0)
     cnt = np.maximum(cnt, 1.0)
     return acc / cnt[:, None] if acc.ndim > 1 else acc / cnt
@@ -55,12 +60,94 @@ def _as_point_data(mesh, name: str) -> np.ndarray | None:
 
 # ---------------------------------------------------------------- 导出
 
+def _decode_vtk_array(el) -> np.ndarray:
+    """VTK XML DataArray：ascii 或 inline base64（UInt64 大端长度头 + 小端数据）。"""
+    import base64
+
+    dtype_map = {"Float64": "f8", "Float32": "f4", "Int64": "i8", "Int32": "i4"}
+    dt = np.dtype("<" + dtype_map[el.get("type")])
+    if el.get("format", "ascii") == "ascii":
+        return np.array(el.text.split(), dtype=dt)
+    raw = base64.b64decode("".join(el.text.split()))
+    n = int.from_bytes(raw[:8], "big")  # header_type=UInt64，长度头恒为大端
+    return np.frombuffer(raw[8 : 8 + n], dtype=dt)
+
+
+def _read_vtp(path: Path):
+    """meshio 不支持 VTK XML PolyData (.vtp)；自行解析为 meshio.Mesh。
+
+    v2312 surfaces function object 的 surfaceFormat vtk 实际写出 .vtp。
+    sampledTriSurfaceMesh 输出的场在 CellData（每 poly 一个值），
+    cuttingPlane 切片的场在 PointData，两者都解析。
+    """
+    import meshio
+    import xml.etree.ElementTree as ET
+
+    piece = ET.parse(path).getroot().find("PolyData/Piece")
+    pts = _decode_vtk_array(piece.find("Points/DataArray")).reshape(-1, 3)
+
+    def arrays(el):
+        out = {}
+        if el is not None:
+            for arr in el.findall("DataArray"):
+                ncomp = int(arr.get("NumberOfComponents", 1))
+                out[arr.get("Name")] = _decode_vtk_array(arr).reshape(-1, ncomp)
+        return out
+
+    point_data = arrays(piece.find("PointData"))
+    poly_cell_data = arrays(piece.find("CellData"))
+
+    line_segs: list[np.ndarray] = []
+    tri_parts: list[np.ndarray] = []
+    tri_counts: list[int] = []  # 每个源 poly 拆出的三角形数（cell data 展开用）
+    for tag in ("Lines", "Polys"):
+        el = piece.find(tag)
+        if el is None:
+            continue
+        conn = _decode_vtk_array(el.find("DataArray[@Name='connectivity']")).astype(int)
+        offs = _decode_vtk_array(el.find("DataArray[@Name='offsets']")).astype(int)
+        start = 0
+        for end in offs:  # 变长图元：polyline 拆线段，n 边形扇形拆三角形
+            ids = conn[start:end]
+            if tag == "Lines" and len(ids) >= 2:
+                line_segs.append(np.stack([ids[:-1], ids[1:]], axis=1))
+            elif tag == "Polys" and len(ids) >= 3:
+                tri_parts.append(
+                    np.stack(
+                        [np.full(len(ids) - 2, ids[0]), ids[1:-1], ids[2:]], axis=1
+                    )
+                )
+                tri_counts.append(len(ids) - 2)
+            start = end
+
+    cells = []
+    cell_data: dict[str, list[np.ndarray]] = {}
+    if line_segs:
+        cells.append(("line", np.vstack(line_segs)))
+    if tri_parts:
+        cells.append(("triangle", np.vstack(tri_parts)))
+        for name, vals in poly_cell_data.items():
+            # 每 poly 的值复制到它拆出的每个三角形
+            cell_data[name] = [np.repeat(vals, tri_counts, axis=0)]
+    return meshio.Mesh(points=pts, cells=cells, point_data=point_data,
+                       cell_data=cell_data)
+
+
+def _read_sampled(path: Path):
+    """读取 OpenFOAM 采样输出：.vtp 自解析，legacy .vtk 走 meshio。"""
+    import meshio
+
+    path = Path(path)
+    if path.suffix == ".vtp":
+        return _read_vtp(path)
+    return meshio.read(path)
+
+
 def export_surface_glb(vtk_path: Path, u_inf: float, out_glb: Path) -> None:
     """车身表面 Cp 顶点色 glTF。"""
-    import meshio
     import trimesh
 
-    m = meshio.read(vtk_path)
+    m = _read_sampled(vtk_path)
     faces = _triangles(m)
     p = _as_point_data(m, "p")
     if p is None:
@@ -103,15 +190,15 @@ def _chain_lines(points: np.ndarray, seg: np.ndarray) -> list[list[int]]:
                     chain.append(other)
                 else:
                     chain.appendleft(other)
+        if chain[0] > chain[-1]:  # 规范化方向，结果与输入段的端点顺序无关
+            chain.reverse()
         chains.append(list(chain))
     return chains
 
 
 def export_streamlines_json(vtk_path: Path, out: Path) -> None:
     """流线 polydata -> JSON 折线列表（含速度幅值）。"""
-    import meshio
-
-    m = meshio.read(vtk_path)
+    m = _read_sampled(vtk_path)
     pts = np.asarray(m.points)
     u = _as_point_data(m, "U")
     speed = (
@@ -136,9 +223,7 @@ def export_streamlines_json(vtk_path: Path, out: Path) -> None:
 
 def export_slice_json(vtk_path: Path, u_inf: float, out: Path) -> None:
     """切片 polydata -> JSON（顶点 Cp 与速度幅值）。"""
-    import meshio
-
-    m = meshio.read(vtk_path)
+    m = _read_sampled(vtk_path)
     faces = _triangles(m)
     pts = np.asarray(m.points)
     p = _as_point_data(m, "p")
@@ -186,11 +271,12 @@ def collect(case_dir: Path, u_inf: float, out_dir: Path) -> dict:
         return hits[-1]
 
     export_surface_glb(
-        latest(["car*.vtk", "*car*.vtk"]), u_inf, viewer_dir / "surface.glb"
+        latest(["car*.vtp", "car*.vtk"]), u_inf, viewer_dir / "surface.glb"
     )
-    export_slice_json(latest(["slice*.vtk"]), u_inf, viewer_dir / "slice.json")
+    export_slice_json(latest(["slice*.vtp", "slice*.vtk"]), u_inf, viewer_dir / "slice.json")
     export_streamlines_json(
-        latest(["particleTracks*.vtk", "*Tracks*.vtk"]), viewer_dir / "streamlines.json"
+        latest(["track*.vtp", "track*.vtk", "particleTracks*.vtk"]),
+        viewer_dir / "streamlines.json",
     )
 
     log_text = (case_dir / "log.simpleFoam").read_text(errors="replace")

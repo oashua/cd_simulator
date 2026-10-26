@@ -1,0 +1,16 @@
+FoamFile
+{
+    format      ascii;
+    class       dictionary;
+    object      turbulenceProperties;
+}
+
+// v2312 读旧名 turbulenceProperties 与 RASModel 关键字（与官方 inflowOutflow 教程一致）
+simulationType  RAS;
+
+RAS
+{
+    RASModel        kOmegaSST;
+    turbulence      on;
+    printCoeffs     on;
+}

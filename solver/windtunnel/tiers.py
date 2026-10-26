@@ -27,16 +27,18 @@ TIERS: tuple[Tier, ...] = (
 
 
 def select_tier(cpu_count: int, mem_gb: float) -> Tier:
-    """按 CPU 核数与内存选档。
+    """按内存（硬约束）与核数选档。
 
-    cpu_count < 8 且 mem_gb < 32   -> low
-    cpu_count <= 32 且 mem_gb <= 128 -> mid
-    其余                            -> high
+    snappyHexMesh 边界层阶段的内存峰值（约 1-2 KB/cell）才是瓶颈，
+    核多内存小的机器（如 WSL 默认分配）不能选高档，否则 OOM：
+    mem_gb < 32            -> low
+    mem_gb < 128 或核数<=32 -> mid
+    其余                   -> high
     """
     if cpu_count <= 0 or mem_gb <= 0:
         raise ValueError(f"cpu_count 和 mem_gb 必须为正数，收到 {cpu_count}, {mem_gb}")
-    if cpu_count < 8 and mem_gb < 32:
+    if mem_gb < 32:
         return TIERS[0]
-    if cpu_count <= 32 and mem_gb <= 128:
+    if mem_gb < 128 or cpu_count <= 32:
         return TIERS[1]
     return TIERS[2]

@@ -45,16 +45,44 @@ def _repair(mesh: trimesh.Trimesh) -> trimesh.Trimesh:
 
 
 def _frontal_area(mesh: trimesh.Trimesh, length: float, divisions: int = 60) -> float:
-    """体素化后向 y-z 平面投影估算迎风面积。
+    """三角面片投影到 y-z 平面栅格化，格心落入任一投影三角形即计入。
 
-    离散误差 ~ 1/divisions 量级，divisions=60 时约 2-3%，对 Cd 影响可接受。
+    比 voxelized().sparse_indices 稳定：体素化在网格相位不利时每维外扩一圈
+    （误差可达 2*pitch/尺寸），栅格化格心严格落在投影内部，误差仅 ~1/divisions。
     """
     pitch = length / divisions
-    grid = mesh.voxelized(pitch)
-    idx = np.asarray(grid.sparse_indices)  # (N, 3) 整数格点
-    yz = idx[:, [1, 2]]
-    unique = np.unique(yz, axis=0)
-    return float(unique.shape[0]) * pitch * pitch
+    tri = np.asarray(mesh.vertices, dtype=float)[np.asarray(mesh.faces)][:, :, 1:]
+    if tri.size == 0:
+        return 0.0
+    # 全局格点相位偏移 0.25*pitch，降低格心恰好压在投影边界上的概率
+    origin = np.floor(tri.reshape(-1, 2).min(axis=0) / pitch) * pitch + 0.25 * pitch
+
+    cells: set[tuple[int, int]] = set()
+    for t in tri:
+        cross = (t[1, 0] - t[0, 0]) * (t[2, 1] - t[0, 1]) - (t[1, 1] - t[0, 1]) * (
+            t[2, 0] - t[0, 0]
+        )
+        if abs(cross) < 1e-18:  # 退化面片（零投影面积）跳过
+            continue
+        lo = np.floor((t.min(axis=0) - origin) / pitch).astype(int)
+        hi = np.floor((t.max(axis=0) - origin) / pitch).astype(int)
+        yy, zz = np.meshgrid(
+            np.arange(lo[0], hi[0] + 1), np.arange(lo[1], hi[1] + 1)
+        )
+        py = origin[0] + yy.ravel() * pitch
+        pz = origin[1] + zz.ravel() * pitch
+
+        def side(px: np.ndarray, pz_: np.ndarray, a: np.ndarray, b: np.ndarray):
+            return (px - a[0]) * (b[1] - a[1]) - (pz_ - a[1]) * (b[0] - a[0])
+
+        d1, d2, d3 = side(py, pz, t[0], t[1]), side(py, pz, t[1], t[2]), side(
+            py, pz, t[2], t[0]
+        )
+        inside = ((d1 >= 0) & (d2 >= 0) & (d3 >= 0)) | (
+            (d1 <= 0) & (d2 <= 0) & (d3 <= 0)
+        )
+        cells.update(zip(yy.ravel()[inside].tolist(), zz.ravel()[inside].tolist()))
+    return float(len(cells)) * pitch * pitch
 
 
 def prepare_geometry(

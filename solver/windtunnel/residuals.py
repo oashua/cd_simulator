@@ -7,7 +7,8 @@ import re
 from dataclasses import dataclass, field
 
 # ESI v2312: "smoothSolver:  Solving for Ux, Initial residual = 0.012, final residual = ..., No Iterations 3"
-_RES_RE = re.compile(r"Solving for (U[x-z]|p), Initial residual = ([\d.eE+-]+)")
+# 发散时常输出 nan/-inf，必须显式匹配（[\d.eE+-]+ 抓不到）
+_RES_RE = re.compile(r"Solving for (U[x-z]|p), Initial residual = (nan|-?inf|[\d.eE+-]+)")
 # forceCoeffs 每次输出形如：
 #   Cm    : 0.012
 #   Cd    : 0.312
@@ -39,13 +40,17 @@ def parse_log(text: str) -> History:
     for i in range(1, len(parts) - 1, 2):
         t = int(parts[i])
         chunk = parts[i + 1]
-        uv = [(_f(v), n) for n, v in _RES_RE.findall(chunk)]
-        p_vals = [_f(v) for n, v in uv if n == "p"]
-        u_vals = [_f(v) for n, v in uv if n.startswith("U")]
+        uv = [(n, _f(v)) for n, v in _RES_RE.findall(chunk)]
+        p_vals = [v for n, v in uv if n == "p"]
+        u_vals = [v for n, v in uv if n.startswith("U")]
         if not u_vals and not p_vals:
             continue
         h.iters.append(t)
-        h.u.append(max(u_vals) if u_vals else math.nan)
+        # 含 nan 时 max() 会吞掉 nan（比较顺序依赖），显式记 nan 保证发散检测可靠
+        if any(_bad(v) for v in u_vals):
+            h.u.append(math.nan)
+        else:
+            h.u.append(max(u_vals) if u_vals else math.nan)
         h.p.append(p_vals[0] if p_vals else math.nan)
     h.cd = [_f(x) for x in _CD_RE.findall(text)]
     h.cl = [_f(x) for x in _CL_RE.findall(text)]

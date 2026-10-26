@@ -1,0 +1,12 @@
+FoamFile
+{
+    format      ascii;
+    class       dictionary;
+    object      transportProperties;
+}
+
+// v2312 simpleFoam 读旧式 transportProperties（官方 inflowOutflow 教程同格式），
+// 物理属性改名 physicalProperties 是后续版本的事
+transportModel  Newtonian;
+
+nu              [0 2 -1 0 0 0 0] 1.5e-05;

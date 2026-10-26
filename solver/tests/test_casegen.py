@@ -30,7 +30,7 @@ def test_render_case_completeness(tmp_path):
 
     # 关键文件齐备
     for f in ["0/U", "0/p", "0/k", "0/omega", "0/nut",
-              "constant/physicalProperties", "constant/momentumTransport",
+              "constant/transportProperties", "constant/turbulenceProperties",
               "constant/triSurface/car.stl",
               "system/blockMeshDict", "system/snappyHexMeshDict",
               "system/controlDict", "system/fvSolution", "system/decomposeParDict",

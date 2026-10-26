@@ -14,7 +14,7 @@ addLayers       true;
 
 geometry
 {
-    ${CAR_STL}
+    "${CAR_STL}"
     {
         type triSurfaceMesh;
         name car;
@@ -45,7 +45,8 @@ castellatedMeshControls
     resolveFeatureAngle 60;
     refinementRegions
     {
-        nearBox { mode inside; level ${NEARBOX}; }
+        // v2312 语法：levels ((距离上限 层级))；mode inside 时距离上限取大值
+        nearBox { mode inside; levels ((1e15 ${NEARBOX})); }
     }
     locationInMesh ${LOC_IN_MESH};
     allowFreeStandingZoneFaces true;
@@ -89,7 +90,9 @@ addLayersControls
 
 meshQualityControls
 {
-    #includeEtc "caseDicts/mesh/generation/meshQualityDict"
+    // 必须用 .cfg 版（含 nSmoothScale/errorReduction，供 snappy 网格优化用）；
+    // 无后缀的 caseDicts/meshQualityDict 是给 checkMesh 的，缺关键字
+    #includeEtc "caseDicts/mesh/generation/meshQualityDict.cfg"
 }
 
 debug 0;

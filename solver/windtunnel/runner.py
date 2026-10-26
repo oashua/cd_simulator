@@ -16,7 +16,18 @@ from .postprocess import collect
 from .residuals import is_diverged, parse_log
 from .tiers import select_tier
 
-DEFAULT_OPENFOAM_BASHRC = "/opt/openfoam2312/etc/bashrc"
+def _detect_bashrc() -> str:
+    """探测 OpenFOAM bashrc：apt 包装在 /usr/lib/openfoam，官方脚本装在 /opt。"""
+    for p in (
+        "/opt/openfoam2312/etc/bashrc",
+        "/usr/lib/openfoam/openfoam2312/etc/bashrc",
+    ):
+        if Path(p).is_file():
+            return p
+    return "/opt/openfoam2312/etc/bashrc"  # 兜底：未安装时保留可读的报错路径
+
+
+DEFAULT_OPENFOAM_BASHRC = _detect_bashrc()
 
 
 def emit(obj: dict) -> None:

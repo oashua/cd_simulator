@@ -7,14 +7,20 @@ def test_low_tier_for_small_machine():
     assert select_tier(4, 16).name == "low"
 
 
+def test_low_tier_when_memory_bound_even_with_many_cpus():
+    # 核多内存小（WSL 常见）必须降档，避免 snappy 边界层阶段 OOM
+    assert select_tier(24, 7.6).name == "low"
+    assert select_tier(64, 16).name == "low"
+
+
 def test_mid_tier_boundary():
     assert select_tier(8, 32).name == "mid"
     assert select_tier(32, 128).name == "mid"
 
 
-def test_cpu_above_32_goes_high_even_with_moderate_mem():
-    # cpu>32 即为 high（内存只是辅助条件）
-    assert select_tier(64, 64).name == "high"
+def test_cpu_above_32_with_moderate_mem_stays_mid():
+    # 内存不足 128GB 时核数再多也不能上 high（内存是硬约束）
+    assert select_tier(64, 64).name == "mid"
 
 
 def test_high_tier():

@@ -19,16 +19,23 @@ surfaces
     (
         car
         {
-            type            sampledTriSurfaceMesh;
-            surface         ${CAR_STL};
-            source          triangulated;
+            // patch 采样输出 snappy 表面网格顶点（数十万点，Cp 云图有分辨率）；
+            // sampledTriSurfaceMesh 只输出 STL 原始顶点，云图过粗
+            type            patch;
+            patches         (car);
+            interpolate     true;
         }
         slice
         {
             type            cuttingPlane;
             planeType       pointAndNormal;
-            planePoint      ${SLICE_POINT};
-            planeNormal     (0 1 0);
+            // v2312 要求 pointAndNormalDict 子字典（平铺 planePoint/planeNormal 是旧版）
+            pointAndNormalDict
+            {
+                basePoint       ${SLICE_POINT};
+                normalVector    (0 1 0);
+            }
+            interpolate      true;
         }
     );
 }

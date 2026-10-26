@@ -1,0 +1,15 @@
+FoamFile
+{
+    format      ascii;
+    class       dictionary;
+    object      surfaceFeatureExtractDict;
+}
+
+// ESI v2312 语法：每个 surface 一个子 dict（Foundation 版的 surfaces (...) 列表与
+// includeEtc "caseDicts/surfaceFeatures/..." 路径在 v2312 中均不存在）
+"${CAR_STL}"
+{
+    extractionMethod    extractFromSurface;
+    includedAngle       150;    // 相邻面法向夹角小于此值视为特征边
+    writeObj            yes;    // 输出 obj 便于调试特征线
+}

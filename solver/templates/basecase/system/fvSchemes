@@ -35,3 +35,9 @@ snGradSchemes
 {
     default         corrected;
 }
+
+// kOmegaSST 低雷诺模式需要壁面距离
+wallDist
+{
+    method          meshWave;
+}

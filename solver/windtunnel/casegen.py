@@ -14,7 +14,7 @@ from .geometry import GeometryMeta
 _REQUIRED_VARS = (
     "AREF", "CAR_STL", "COFR_X", "COFR_Z", "END_TIME", "K_INF", "LOC_IN_MESH",
     "LREF", "NEARBOX", "NEARBOX_MAX", "NEARBOX_MIN", "NPROC", "NX", "NY", "NZ",
-    "OMEGA_INF", "RELAX_P", "RELAX_TURB", "RELAX_U", "SEED_LENGTH", "SEED_POS",
+    "OMEGA_INF", "RELAX_P", "RELAX_TURB", "RELAX_U", "SEED_END", "SEED_START",
     "SLICE_POINT", "SURF_MAX", "SURF_MIN", "U_INF", "XMAX", "XMIN", "YMAX",
     "YMIN", "ZMAX", "ZMIN",
 )
@@ -59,7 +59,9 @@ def render_case(
     nearbox_max = (1.75 * length, 1.0 * width, 2.2 * height)
 
     cofr_x, cofr_z = 0.0, height / 2.0
-    loc_in_mesh = (0.0, 0.0, 0.4 * height)
+    # locationInMesh 必须在流体域内（车外）：取上游高处；
+    # 若落在车体内，snappy subsetting 只保留车身附近网格，外域与 inlet/outlet 等 patch 全部丢失
+    loc_in_mesh = (-1.5 * length, 0.0, 3.0 * height)
     slice_point = (0.0, 0.0, cofr_z)
     seed_pos = (-1.5 * length, 0.0, 0.5 * height)
     seed_length = 0.8 * width
@@ -75,7 +77,9 @@ def render_case(
         "ZMIN": f"{z_min:.3f}", "ZMAX": f"{z_max:.3f}",
         "NX": str(nx), "NY": str(ny), "NZ": str(nz),
         "CELL": f"{cell:.4f}",
-        "CAR_STL": "constant/triSurface/car.stl",
+        # OpenFOAM dict key 不支持含 / 的路径（会被当字典路径拆开），只写文件名，
+        # triSurfaceMesh / surfaceFeatureExtract 自动在 constant/triSurface/ 下搜索
+        "CAR_STL": "car.stl",
         "LOC_IN_MESH": _vec(loc_in_mesh),
         "NEARBOX_MIN": _vec(nearbox_min),
         "NEARBOX_MAX": _vec(nearbox_max),
@@ -83,8 +87,12 @@ def render_case(
         "SURF_MIN": str(p.surf_min), "SURF_MAX": str(p.surf_max),
         "COFR_X": f"{cofr_x:.3f}", "COFR_Z": f"{cofr_z:.3f}",
         "SLICE_POINT": _vec(slice_point),
-        "SEED_POS": _vec(seed_pos),
-        "SEED_LENGTH": f"{seed_length:.3f}",
+        "SEED_START": _vec(
+            (seed_pos[0], seed_pos[1] - seed_length / 2, seed_pos[2])
+        ),
+        "SEED_END": _vec(
+            (seed_pos[0], seed_pos[1] + seed_length / 2, seed_pos[2])
+        ),
         "K_INF": f"{k_inf:.6e}",
         "OMEGA_INF": f"{omega_inf:.6e}",
         "AREF": f"{meta.frontal_area:.4f}",

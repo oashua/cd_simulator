@@ -5,21 +5,12 @@ FoamFile
     object      streamlines;
 }
 
-// 由 postProcess -func streamlines -latestTime 单独调用
-streamlines
-{
-    type            streamlines;
-    libs            ("libfieldFunctionObjects.so");
-    writeControl    writeTime;
-    writeInterval   1;
-    log             yes;
-    lifeTime        5;
-    trackForward    yes;
-    cloud           particleTracks;
-    seedSamples     12;
-    interpolationScheme cellPoint;
-    fields          (U);
-    seedPosition    ${SEED_POS};
-    seedAxis        (0 1 0);
-    seedLength      ${SEED_LENGTH};
-}
+// 由 postProcess -func streamlines -latestTime 单独调用；
+// v2312 官方写法：start/end/nLines + include cfg（Foundation 版的
+// seedPosition/seedAxis/seedLength 写法不被 v2312 识别）
+nLines  12;
+start   ${SEED_START};
+end     ${SEED_END};
+fields  (U);
+
+#includeEtc "caseDicts/postProcessing/visualization/streamlines.cfg"
