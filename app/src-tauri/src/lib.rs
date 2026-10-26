@@ -4,13 +4,13 @@ mod commands;
 mod wsl;
 
 use commands::RunState;
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
-        .manage(RunState(Mutex::new(None)))
+        .manage(RunState(Arc::new(Mutex::new(None))))
         .invoke_handler(tauri::generate_handler![
             commands::system_info,
             commands::detect_environment,

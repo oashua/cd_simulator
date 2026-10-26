@@ -4,19 +4,19 @@ use std::fs;
 use std::io::BufRead;
 use std::path::PathBuf;
 use std::process::{Child, Command, Stdio};
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 
 use serde::Serialize;
 use tauri::{AppHandle, Emitter, State};
 
 use crate::wsl;
 
-/// 与 solver/windtunnel/tiers.py 的 select_tier 保持一致。
+/// 与 solver/windtunnel/tiers.py 的 select_tier 保持一致（内存是硬约束）。
 fn tier_name(cpu: usize, mem_gb: Option<f64>) -> &'static str {
-    match (cpu, mem_gb) {
-        (c, Some(m)) if c < 8 && m < 32.0 => "low",
-        (c, Some(m)) if c <= 32 && m <= 128.0 => "mid",
-        (c, None) if c <= 32 => "mid",
+    match mem_gb {
+        Some(m) if m < 32.0 => "low",
+        None => "low", // 内存未知时保守取 low
+        Some(_) if cpu <= 32 => "mid",
         _ => "high",
     }
 }
@@ -73,7 +73,7 @@ pub fn detect_environment() -> EnvStatus {
 }
 
 /// 全局子进程句柄，供 cancel_run 使用。
-pub struct RunState(pub Mutex<Option<Child>>);
+pub struct RunState(pub Arc<Mutex<Option<Child>>>);
 
 #[derive(Serialize, Clone)]
 pub struct RunConfig {
@@ -145,7 +145,7 @@ pub fn start_run(
         .map_err(|e| format!("无法启动 WSL 计算进程: {e}"))?;
 
     // stdout 按行转发为 run-log 事件
-    let mut stdout = child.stdout.take().expect("stdout piped");
+    let stdout = child.stdout.take().expect("stdout piped");
     let handle = app.clone();
     std::thread::spawn(move || {
         let reader = std::io::BufReader::new(stdout);
@@ -158,17 +158,19 @@ pub fn start_run(
     *state.0.lock().unwrap() = Some(child);
 
     // 监视线程：进程退出后清空状态并发 run-exit 事件
+    // （State 是借用，线程需 'static —— 持有内部 Arc 的克隆）
     let handle = app.clone();
+    let shared = state.0.clone();
     std::thread::spawn(move || loop {
         {
-            let guard = state.0.lock().unwrap();
+            let guard = shared.lock().unwrap();
             match guard.as_ref() {
                 Some(c) if c.id() == pid => {}
                 _ => return, // 已被 cancel 或替换
             }
         }
         std::thread::sleep(std::time::Duration::from_millis(500));
-        let mut guard = state.0.lock().unwrap();
+        let mut guard = shared.lock().unwrap();
         if let Some(c) = guard.as_mut() {
             if c.id() == pid {
                 match c.try_wait() {

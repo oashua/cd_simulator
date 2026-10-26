@@ -4,7 +4,6 @@ import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import { STLLoader } from "three/examples/jsm/loaders/STLLoader.js";
 import { OBJLoader } from "three/examples/jsm/loaders/OBJLoader.js";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
-import { base64ToBytes } from "./api";
 
 export interface Viewer {
   dispose(): void;
@@ -56,15 +55,8 @@ export function createViewer(container: HTMLElement): Viewer {
   scene.add(modelGroup, resultGroup);
 
   let raf = 0;
-  const clock = new THREE.Clock();
   const animate = () => {
     raf = requestAnimationFrame(animate);
-    // 流线虚线流动动画
-    const t = clock.getElapsedTime();
-    resultGroup.traverse((o) => {
-      const mat = (o as THREE.Line).material as THREE.LineDashedMaterial | undefined;
-      if (mat && mat.isLineDashedMaterial) mat.dashOffset = -t * 0.5;
-    });
     controls.update();
     renderer.render(scene, camera);
   };
@@ -189,7 +181,8 @@ export async function loadModelFile(file: File): Promise<Object3D> {
   const name = file.name.toLowerCase();
   if (name.endsWith(".stl")) {
     const buf = await file.arrayBuffer();
-    return new STLLoader().parse(buf);
+    const geometry = new STLLoader().parse(buf);
+    return new THREE.Mesh(geometry, new THREE.MeshStandardMaterial());
   }
   if (name.endsWith(".obj")) {
     const text = await file.text();

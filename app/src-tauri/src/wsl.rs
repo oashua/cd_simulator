@@ -61,7 +61,7 @@ pub fn run_bash(distro: &str, script: &str) -> Result<String, String> {
 pub fn openfoam_installed(distro: &str) -> bool {
     run_bash(
         distro,
-        "test -f /opt/openfoam2312/etc/bashrc && echo yes || echo no",
+        "test -f /opt/openfoam2312/etc/bashrc -o -f /usr/lib/openfoam/openfoam2312/etc/bashrc && echo yes || echo no",
     )
     .map(|s| s.trim() == "yes")
     .unwrap_or(false)

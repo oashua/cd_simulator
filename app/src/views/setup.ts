@@ -6,11 +6,11 @@ wsl --install -d Ubuntu --no-launch
 # 重启电脑后，打开 Ubuntu 完成初始用户配置，然后：
 
 # 在 WSL Ubuntu 内执行：
-sudo sh -c 'wget -qO - https://dl.openfoam.com/gpg.key > /etc/apt/trusted.gpg.d/openfoam.asc'
-sudo add-apt-repository -y http://dl.openfoam.com/ubuntu/latest
+sudo wget -qO /etc/apt/trusted.gpg.d/openfoam.gpg https://dl.openfoam.com/pubkey.gpg
+echo "deb https://dl.openfoam.com/repos/deb $(lsb_release -cs) main" | sudo tee /etc/apt/sources.list.d/openfoam.list
 sudo apt-get update
 sudo apt-get install -y openfoam2312-default libopenmpi-dev openmpi-bin python3-pip
-pip3 install --user numpy trimesh meshio pymeshfix
+pip3 install --user --break-system-packages numpy trimesh meshio pymeshfix networkx
 
 # 将随应用分发的 solver/ 目录复制到 WSL：
 mkdir -p ~/cd_simulator && cp -r /mnt/c/path/to/solver ~/cd_simulator/solver`;
