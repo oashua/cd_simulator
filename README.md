@@ -40,9 +40,27 @@ cd app && npm install && npm run tauri build   # 或 cargo tauri dev
 - 在此条件下 Cd 绝对值预期偏差 **±0.01–0.03**；不同配置间的趋势对比更可信。
 - 迎风面积由体素投影自动估算（离散误差 ~2%）。
 
-## 未运行验证清单（首次实机运行前必读）
+## 实机验证状态（2026-10-26，WSL2 Ubuntu 26.04 + OpenFOAM v2312 2312.260127）
 
-本项目按用户要求在开发机上**未安装 OpenFOAM、未做任何运行测试**，以下内容均为"代码写好但从未运行"状态：
+首次实机安装与冒烟验证已完成。用 4×1.8×1.2 m 盒子模型跑通全管线：
+几何处理 → case 渲染 → blockMesh → surfaceFeatureExtract → snappyHexMesh（7 patch 完整风洞域）
+→ simpleFoam → postProcess surfaces/streamlines → collect 导出 viewer 文件（surface.glb 652 KB / slice.json / streamlines.json）。
+
+| 项目 | 状态 | 首次验证发现并修复的问题 |
+|---|---|---|
+| OpenFOAM dict 语法（v2312） | ✅ 已验证 | ESI 源地址更换（`repos/deb` + `pubkey.gpg`）；`surfaceFeatures`→`surfaceFeatureExtract`（dict 同步改名）；dict key 不支持含 `/` 路径（`CAR_STL` 只写文件名）；`refinementRegions` 需 `levels ((距离 层级))` 语法；`meshQualityControls` 需 include `.cfg` 版本；`locationInMesh` 原取值在车内导致 subsetting 丢失全域（改为上游流体点） |
+| constant 物性字典 | ✅ 已验证 | v2312 simpleFoam 读旧名 `transportProperties`（`transportModel Newtonian`）与 `turbulenceProperties`（`RASModel`），非 `physicalProperties`/`momentumTransport` |
+| `system/streamlines` | ✅ 已验证 | Foundation 版 `seedPosition/seedAxis` 不被识别，改为官方 v2312 写法（`start`/`end`/`nLines` + include `streamlines.cfg`） |
+| `system/surfaces` | ✅ 已验证 | `sampledTriSurfaceMesh` 的 `source` 仅 `cells/insideCells/boundaryFaces`；车表面 Cp 改用 patch 采样（`patches (car)`，输出 snappy 顶点分辨率）；`cuttingPlane` 需 `pointAndNormalDict` 子字典 |
+| 后处理读取 | ✅ 已验证 | v2312 `surfaceFormat vtk` 实际输出 `.vtp`（XML PolyData），meshio 不支持——postprocess 自带 vtp 解析（含 base64 二进制、CellData→顶点平均、变长 poly 扇形三角化） |
+| solver Python 单元测试 | ✅ 30/30 通过 | 修复 residuals 元组序颠倒/正则抓不到 nan、postprocess cell_data 结构误解与 np.add.at 广播、frontal_area 体素相位外扩（改三角形投影栅格化）；`select_tier` 改为内存主导选档（低内存多核机器不再 OOM） |
+| 前端 TS 编译 | ✅ 已通过 | 修复 viewer.ts 三处（未用导入、three 0.169 无 dashOffset、STL parse 返回需包 Mesh）；`npm run build` 通过 |
+| Rust 侧 WSL 桥 | ✅ `cargo check` 通过 | 未做运行冒烟（需 `npm run tauri dev` 实机联调） |
+| 完整求解收敛性 | ⚠️ 未验证 | 冒烟仅 30 步（Cd 尚在爬升）。建议按下方基准做端到端标定 |
+
+## 未运行验证清单（历史记录，首次实机验证前）
+
+本项目按用户要求在开发机上**未安装 OpenFOAM、未做任何运行测试**，以下内容均为"代码写好但从未运行"状态（已于 2026-10-26 完成上表验证）：
 
 | 项目 | 状态 | 首次验证方法 |
 |---|---|---|
